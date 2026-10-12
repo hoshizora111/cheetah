@@ -115,12 +115,25 @@ input::placeholder{color:var(--ink-2);opacity:.8}
 
 /* ── home ── */
 .home{display:grid;gap:22px}
+.home > *{min-width:0}
 @media (min-width:860px){
   .home{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-areas:"hero todos" "map todos";align-items:start;column-gap:28px}
   .home > .hero{grid-area:hero}.home > .mapbox{grid-area:map}.home > .todos{grid-area:todos}
 }
+.hero-days{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px;padding-bottom:2px}
+.hero-days::-webkit-scrollbar{display:none}
+.hday{flex:none;padding:4px 11px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--ink-2);white-space:nowrap;background:var(--surface)}
+.hday.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.hday b{font-family:var(--mono);font-weight:500;margin-left:4px}
+@media (max-width:420px){.hday{padding:4px 8px;font-size:12px}.hday b{margin-left:3px}.hero-days{gap:4px}}
+.hero-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior-x:contain}
+.hero-track::-webkit-scrollbar{display:none}
+.hero-card{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
+.hero-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;font-size:12.5px;color:var(--ink-2)}
+.hero-foot .arrows{display:none;gap:4px}
+@media (min-width:760px){.hero-foot .arrows{display:flex}}
 .hero-label{font-size:13px;color:var(--ink-2);font-weight:500;margin-bottom:6px}
-.hero-num{display:inline;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;font-size:clamp(44px,13vw,66px);line-height:1.1;letter-spacing:-.04em;padding:0 8px;margin-left:-8px;background:linear-gradient(transparent 56%,var(--hl) 56% 90%,transparent 90%)}
+.hero-num{display:inline;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;font-size:clamp(44px,13vw,66px);line-height:1.1;letter-spacing:-.04em;padding:0 8px 0 2px;background:linear-gradient(transparent 56%,var(--hl) 56% 90%,transparent 90%)}
 .hero-num small{font-family:var(--font);font-size:.3em;font-weight:600;letter-spacing:0;margin:0 .5em 0 .15em}
 .hero-num small:last-child{margin-right:0}
 .now-line{margin-top:14px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:14.5px}
@@ -448,7 +461,7 @@ var S = { fixed: [], events: [], cuts: [], todos: [], settings: clone(DEFAULT_SE
 var DOCS = ['fixed', 'events', 'todos', 'settings'];
 var now0 = new Date();
 var ui = {
-  tab: 'home', evView: 'week',
+  tab: 'home', evView: 'week', heroIdx: 0,
   week: mondayOf(now0), ttWeek: mondayOf(now0),
   month: new Date(now0.getFullYear(), now0.getMonth(), 1),
   sel: ymd(now0), doneOpen: false
@@ -795,6 +808,13 @@ function freeBetween(from, to){
   }
   return total;
 }
+/* 그날 아침 기상 시각(분). 수면 설정이 없으면 0시. */
+function wakeMin(date){
+  var bl = sleepBlocks(date).sort(function(a, b){ return a.s - b.s; });
+  for (var i = 0; i < bl.length; i++) if (bl[i].e < 1440) return bl[i].e;
+  return 0;
+}
+function wakeMoment(date){ return new Date(sod(date).getTime() + wakeMin(date) * 60000); }
 function nextBedtime(now){
   var today = sod(now);
   for (var k = -1; k < 8; k++){
@@ -833,33 +853,51 @@ function renderHome(){
     sum7 += free;
   }
 
-  var tkey = ymd(today);
-  var todays = dayBlocks(today, true).filter(function(b){ return b.type !== 'sleep'; }).sort(function(a, b){ return a.s - b.s; });
-  var allDay = S.events.filter(function(e){ return e.date === tkey && e.allDay; });
-  var listHtml = '';
-  allDay.forEach(function(e){ listHtml += '<li><span class="t">시간 미정</span><span class="n">' + esc(e.title) + '</span></li>'; });
-  todays.forEach(function(b){
-    var cls = b.off ? 'off' : (b.e <= m ? 'past' : (b.s <= m ? 'cur' : '')), btn = '', attrs = ' data-date="' + tkey + '" data-ref="' + esc(b.ref || '') + '"';
-    if (b.ref){
-      if (b.off || b.cut) btn = '<button type="button" class="btn btn-sm btn-ghost" data-act="occUndo"' + attrs + '>되돌리기</button>';
-      else if (b.s <= m && m < b.e) btn = '<button type="button" class="btn btn-sm" data-act="occCutNow"' + attrs + '>지금 끝남</button>';
-      else if (b.s > m) btn = '<button type="button" class="btn btn-sm btn-ghost" data-act="occSkip"' + attrs + '>오늘은 빼기</button>';
-    }
-    var note = b.off ? '오늘은 뺌' : (b.cut ? '일찍 끝남' : (b.place || ''));
-    listHtml += '<li class="' + cls + '"><span class="t">' + fromMin(b.s) + '–' + fromMin(b.e) + '</span><span class="n">' + esc(b.title) + (note ? '<small>' + esc(note) + '</small>' : '') + '</span>' + btn + '</li>';
-  });
-
+  var cards = '', chips = '';
+  for (i = 0; i < 7; i++){
+    var cd = addDays(today, i), ck = ymd(cd), isT0 = i === 0;
+    var ws = isT0 ? now : wakeMoment(cd), wb = nextBedtime(ws), freeDay = freeBetween(ws, wb.t);
+    var dayBl = isT0 ? blocks : dayBlocks(cd);
+    var list = dayBlocks(cd, true).filter(function(b){ return b.type !== 'sleep'; }).sort(function(a, b){ return a.s - b.s; });
+    var allDay = S.events.filter(function(e){ return e.date === ck && e.allDay; });
+    var listHtml = '';
+    allDay.forEach(function(e){ listHtml += '<li><span class="t">시간 미정</span><span class="n">' + esc(e.title) + '</span></li>'; });
+    list.forEach(function(b){
+      var past = isT0 && b.e <= m, curNow = isT0 && b.s <= m && m < b.e;
+      var cls = b.off ? 'off' : (past ? 'past' : (curNow ? 'cur' : '')), btn = '', attrs = ' data-date="' + ck + '" data-ref="' + esc(b.ref || '') + '"';
+      if (b.ref){
+        if (b.off || b.cut) btn = '<button type="button" class="btn btn-sm btn-ghost" data-act="occUndo"' + attrs + '>되돌리기</button>';
+        else if (curNow) btn = '<button type="button" class="btn btn-sm" data-act="occCutNow"' + attrs + '>지금 끝남</button>';
+        else if (!past) btn = '<button type="button" class="btn btn-sm btn-ghost" data-act="occSkip"' + attrs + '>' + (isT0 ? '오늘은 빼기' : '이 날은 빼기') + '</button>';
+      }
+      var note = b.off ? '이 날은 뺌' : (b.cut ? '일찍 끝남' : (b.place || ''));
+      listHtml += '<li class="' + cls + '"><span class="t">' + fromMin(b.s) + '–' + fromMin(b.e) + '</span><span class="n">' + esc(b.title) + (note ? '<small>' + esc(note) + '</small>' : '') + '</span>' + btn + '</li>';
+    });
+    var dayName = isT0 ? '오늘' : (i === 1 ? '내일' : DOW[dowMon(cd)] + '요일');
+    var label = isT0
+      ? (bed.label ? '취침 ' + bed.label + ' 전까지 남은 순공 시간' : '자정까지 남은 순공 시간')
+      : dayName + ' ' + (cd.getMonth() + 1) + '/' + cd.getDate() + ' · 기상 ' + fromMin(wakeMin(cd)) + ' → 취침 ' + (wb.label || '자정') + ' 순공 가능';
+    var fh = Math.floor(freeDay / 60), fm = freeDay % 60;
+    cards += '<div class="hero-card" data-i="' + i + '">' +
+      '<p class="hero-label">' + label + '</p>' +
+      '<p><span class="hero-num">' + fh + '<small>시간</small>' + p2(fm) + '<small>분</small></span></p>' +
+      (isT0 ? '<p class="now-line">' + nowHtml + '</p>' : '') +
+      '<dl class="stats">' +
+        '<div class="stat"><dt>고정 일정</dt><dd>' + durHM(clipLen(dayBl, 0, 1440, 'fixed')) + '</dd></div>' +
+        '<div class="stat"><dt>변동 일정</dt><dd>' + durHM(clipLen(dayBl, 0, 1440, 'event')) + '</dd></div>' +
+        '<div class="stat"><dt>식사</dt><dd>' + durHM(clipLen(dayBl, 0, 1440, 'meal')) + '</dd></div>' +
+      '</dl>' +
+      (listHtml ? '<ul class="today-list" aria-label="' + dayName + ' 일정">' + listHtml + '</ul>' : '<p class="empty">이 날은 일정이 없습니다.</p>') +
+      '</div>';
+    chips += '<button type="button" class="hday' + (i === ui.heroIdx ? ' on' : '') + '" data-act="heroGo" data-i="' + i + '">' + (isT0 ? '오늘' : DOW[dowMon(cd)]) + '<b>' + cd.getDate() + '</b></button>';
+  }
   $('#hero').innerHTML =
-    '<p class="hero-label">' + (bed.label ? '취침 ' + bed.label + ' 전까지 남은 순공 시간' : '자정까지 남은 순공 시간') + '</p>' +
-    '<p><span class="hero-num">' + h + '<small>시간</small>' + p2(mm) + '<small>분</small></span></p>' +
-    '<p class="now-line">' + nowHtml + '</p>' +
-    '<dl class="stats">' +
-      '<div class="stat"><dt>오늘 고정 일정</dt><dd>' + durHM(clipLen(blocks, 0, 1440, 'fixed')) + '</dd></div>' +
-      '<div class="stat"><dt>오늘 변동 일정</dt><dd>' + durHM(clipLen(blocks, 0, 1440, 'event')) + '</dd></div>' +
-      '<div class="stat"><dt>오늘 식사</dt><dd>' + durHM(clipLen(blocks, 0, 1440, 'meal')) + '</dd></div>' +
-      '<div class="stat"><dt>7일간 순공 가능</dt><dd>' + durHM(sum7) + '</dd></div>' +
-    '</dl>' +
-    (listHtml ? '<ul class="today-list" aria-label="오늘 일정">' + listHtml + '</ul>' : '');
+    '<div class="hero-days" id="heroDays" role="tablist" aria-label="날짜">' + chips + '</div>' +
+    '<div class="hero-track" id="heroTrack">' + cards + '</div>' +
+    '<div class="hero-foot"><span>옆으로 밀면 다음 날 · 앞으로 7일 합계 <b class="mono">' + durKo(sum7) + '</b></span>' +
+    '<span class="arrows"><button type="button" class="nav-btn" data-act="heroPrev" aria-label="이전 날">‹</button><button type="button" class="nav-btn" data-act="heroNext" aria-label="다음 날">›</button></span></div>';
+  var tr = $('#heroTrack');
+  tr.scrollLeft = ui.heroIdx * tr.clientWidth;
 
   // 7일 시간 지도
   var mapHtml = '<div class="map-row" aria-hidden="true"><span></span><div class="axis"><span style="left:0">0</span><span style="left:25%">6</span><span style="left:50%">12</span><span style="left:75%">18</span><span style="left:100%">24</span></div><span></span></div>';
@@ -1345,6 +1383,9 @@ document.addEventListener('click', function(e){
   switch (act){
     case 'tab': ui.tab = el.dataset.tab; lsSet('tab', ui.tab); render(); window.scrollTo(0, 0); break;
     case 'settings': openSettings(); break;
+    case 'heroGo': heroGo(+el.dataset.i); break;
+    case 'heroPrev': heroGo(Math.max(0, ui.heroIdx - 1)); break;
+    case 'heroNext': heroGo(Math.min(6, ui.heroIdx + 1)); break;
     case 'retrySync': if (gistOn()){ gist.err = ''; gistPull('manual'); } else if (store.error){ store.error = false; DOCS.forEach(flush); } break;
     case 'gistConnect': gistConnect(); break;
     case 'gistNow': gist.err = ''; gistMsg('동기화 중…'); gistPull('manual').then(function(){ gistMsg(gist.err ? '동기화하지 못했습니다. 연결을 확인하세요.' : '동기화했습니다.'); }); break;
@@ -1442,6 +1483,25 @@ $('#todoAdd').addEventListener('submit', function(e){
   save('todos');
 });
 document.addEventListener('toggle', function(e){ if (e.target && e.target.id === 'doneBox') ui.doneOpen = e.target.open; }, true);
+
+function heroGo(i){
+  var tr = $('#heroTrack'); if (!tr) return;
+  ui.heroIdx = i; heroChips();
+  tr.scrollTo({ left: i * tr.clientWidth, behavior: 'smooth' });
+}
+function heroChips(){
+  var chips = document.querySelectorAll('#heroDays .hday');
+  chips.forEach(function(c){ c.classList.toggle('on', +c.dataset.i === ui.heroIdx); });
+}
+var heroScrollT = null;
+document.addEventListener('scroll', function(e){
+  var t = e.target; if (!t || t.id !== 'heroTrack') return;
+  clearTimeout(heroScrollT);
+  heroScrollT = setTimeout(function(){
+    var idx = Math.max(0, Math.min(6, Math.round(t.scrollLeft / Math.max(1, t.clientWidth))));
+    if (idx !== ui.heroIdx){ ui.heroIdx = idx; heroChips(); }
+  }, 80);
+}, true);
 
 /* 시계가 흐르면 남은 시간도 바뀐다 (읽기만, 저장 없음) */
 function tick(){ if (!dlg.open && document.visibilityState !== 'hidden' && ui.tab !== 'events') render(); }
