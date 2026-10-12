@@ -274,6 +274,10 @@ dialog::backdrop{background:rgba(8,12,22,.55)}
 .sheet-actions .sp{flex:1}
 .note{font-size:12.5px;color:var(--ink-2)}
 .bk{padding-top:14px;border-top:1px solid var(--line)}
+.sleep-rows{display:grid;gap:6px}
+.sleep-row{display:grid;grid-template-columns:76px minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:center}
+.sleep-day{font-size:13px;font-weight:600;white-space:nowrap}
+.sleep-day small{display:block;font-weight:400;color:var(--ink-2);font-size:11px}
 .bk-row{display:flex;gap:8px;flex-wrap:wrap}
 textarea{font-family:var(--mono);font-size:16px;line-height:1.35;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--ink);width:100%;min-width:0;resize:vertical;word-break:break-all}
 button,input,textarea{touch-action:manipulation}
@@ -434,7 +438,8 @@ function unionLen(iv){
 }
 
 /* ───────── state ───────── */
-var DEFAULT_SETTINGS = { sleepStart: '00:00', sleepEnd: '07:00', meals: [] };
+var DEFAULT_SLEEP = { start: '00:00', end: '07:00' };
+var DEFAULT_SETTINGS = { sleep: [0,1,2,3,4,5,6].map(function(){ return clone(DEFAULT_SLEEP); }), meals: [] };
 var S = { fixed: [], events: [], cuts: [], todos: [], settings: clone(DEFAULT_SETTINGS) };
 var DOCS = ['fixed', 'events', 'todos', 'settings'];
 var now0 = new Date();
@@ -472,6 +477,28 @@ function cleanTodos(a){
     var est = Number(x.est); if (!(est > 0)) est = 0;
     return { id: String(x.id || uid()), title: String(x.title || '').slice(0, 120), due: isD(x.due) ? x.due : '', est: Math.round(est), done: !!x.done, doneAt: Number(x.doneAt) || 0 };
   });
+}
+/* 수면: 요일별 {start,end} 7개. 각 요일 '밤'에 자는 시각과 다음 날 아침 기상 시각.
+   예전 저장분(sleepStart/sleepEnd 하나)은 7일에 같은 값으로 옮긴다. */
+function cleanSleep(body){
+  var base = (isT(body.sleepStart) && isT(body.sleepEnd)) ? { start: body.sleepStart, end: body.sleepEnd } : DEFAULT_SLEEP;
+  var arr = Array.isArray(body.sleep) ? body.sleep : [];
+  return [0,1,2,3,4,5,6].map(function(d){
+    var x = arr[d];
+    return (x && isT(x.start) && isT(x.end)) ? { start: x.start, end: x.end } : clone(base);
+  });
+}
+function sleepCfg(d){ return S.settings.sleep[((d % 7) + 7) % 7]; }
+/* 어떤 날짜의 수면 구간: 전날 밤 설정에서 이어지는 아침 부분 + 그날 밤 설정의 자정 전 부분 */
+function sleepBlocks(date){
+  var out = [], dow = dowMon(date), prev = sleepCfg(dow - 1), cur = sleepCfg(dow);
+  var pb = toMin(prev.start), pw = toMin(prev.end), cb = toMin(cur.start), cw = toMin(cur.end);
+  if (pb !== pw){
+    if (pb > pw){ if (pw > 0) out.push({ s: 0, e: pw, type: 'sleep', title: '수면' }); }
+    else out.push({ s: pb, e: pw, type: 'sleep', title: '수면' });
+  }
+  if (cb !== cw && cb > cw) out.push({ s: cb, e: 1440, type: 'sleep', title: '수면' });
+  return out;
 }
 /* 그날만 적용하는 조정: 고정 일정·식사를 하루 빼거나(end ''), 일찍 끝냄(end 'HH:MM') */
 function cleanCuts(a){
@@ -519,8 +546,7 @@ function applyBody(name, body){
   body = body && typeof body === 'object' ? body : {};
   if (name === 'settings'){
     S.settings = {
-      sleepStart: isT(body.sleepStart) ? body.sleepStart : DEFAULT_SETTINGS.sleepStart,
-      sleepEnd: isT(body.sleepEnd) ? body.sleepEnd : DEFAULT_SETTINGS.sleepEnd,
+      sleep: cleanSleep(body),
       meals: cleanMeals(body.meals)
     };
   } else if (name === 'fixed') S.fixed = cleanFixed(body.items);
@@ -613,11 +639,7 @@ function pushOcc(out, key, b, withOff){
   out.push(b);
 }
 function dayBlocks(date, withOff){
-  var out = [], a = toMin(S.settings.sleepStart), b = toMin(S.settings.sleepEnd);
-  if (a !== b){
-    if (a < b) out.push({ s: a, e: b, type: 'sleep', title: '수면' });
-    else { if (b > 0) out.push({ s: 0, e: b, type: 'sleep', title: '수면' }); out.push({ s: a, e: 1440, type: 'sleep', title: '수면' }); }
-  }
+  var out = sleepBlocks(date);
   var dow = dowMon(date), key = ymd(date);
   S.fixed.forEach(function(f){
     f.slots.forEach(function(sl){
@@ -654,19 +676,21 @@ function freeBetween(from, to){
   return total;
 }
 function nextBedtime(now){
-  var a = toMin(S.settings.sleepStart), b = toMin(S.settings.sleepEnd);
-  if (a === b) return addDays(sod(now), 1);
-  var t = new Date(sod(now).getTime() + a * 60000);
-  if (t <= now) t = new Date(addDays(sod(now), 1).getTime() + a * 60000);
-  return t;
+  var today = sod(now);
+  for (var k = -1; k < 8; k++){
+    var d = addDays(today, k), cfg = sleepCfg(dowMon(d)), b = toMin(cfg.start), w = toMin(cfg.end);
+    if (b === w) continue;
+    var t = new Date((b > w ? d : addDays(d, 1)).getTime() + b * 60000);
+    if (t > now) return { t: t, label: cfg.start };
+  }
+  return { t: addDays(today, 1), label: '' };
 }
 
 /* ───────── render: 지금 ───────── */
 function renderHome(){
   var now = new Date(), today = sod(now), m = now.getHours() * 60 + now.getMinutes();
   var blocks = dayBlocks(today);
-  var remain = freeBetween(now, nextBedtime(now));
-  var hasSleep = S.settings.sleepStart !== S.settings.sleepEnd;
+  var bed = nextBedtime(now), remain = freeBetween(now, bed.t);
   var h = Math.floor(remain / 60), mm = remain % 60;
 
   var pri = { event: 4, fixed: 3, meal: 2, sleep: 1 };
@@ -706,7 +730,7 @@ function renderHome(){
   });
 
   $('#hero').innerHTML =
-    '<p class="hero-label">' + (hasSleep ? '취침 ' + S.settings.sleepStart + ' 전까지 남은 순공 시간' : '자정까지 남은 순공 시간') + '</p>' +
+    '<p class="hero-label">' + (bed.label ? '취침 ' + bed.label + ' 전까지 남은 순공 시간' : '자정까지 남은 순공 시간') + '</p>' +
     '<p><span class="hero-num">' + h + '<small>시간</small>' + p2(mm) + '<small>분</small></span></p>' +
     '<p class="now-line">' + nowHtml + '</p>' +
     '<dl class="stats">' +
@@ -896,7 +920,8 @@ function render(){
     $('#view-' + t).hidden = ui.tab !== t;
     $('#tab-' + t).setAttribute('aria-selected', ui.tab === t ? 'true' : 'false');
   });
-  $('#sleepLabel').textContent = S.settings.sleepStart === S.settings.sleepEnd ? '수면 없음' : S.settings.sleepStart + '–' + S.settings.sleepEnd;
+  var sc = sleepCfg(dowMon(new Date()));
+  $('#sleepLabel').textContent = sc.start === sc.end ? '수면 없음' : sc.start + '–' + sc.end;
   if (ui.tab === 'home') renderHome();
   else if (ui.tab === 'timetable') renderTimetable();
   else renderEvents();
@@ -994,8 +1019,12 @@ function openSettings(){
         ? '지금은 이 브라우저에만 저장됩니다. Claude에 로그인한 상태로 열면 계정에 저장됩니다.'
         : '모든 내용은 이 기기에만 저장됩니다. 기기를 바꾸거나 사이트 데이터를 지우기 전에 백업 코드를 복사해 두세요.');
   form.innerHTML = '<h2 id="sheetTitle">설정</h2>' +
-    '<div class="field"><span>수면 시간</span><p class="note">순공 시간을 계산할 때 매일 이 시간을 뺍니다.</p></div>' +
-    '<div class="row2"><label class="field"><span>취침</span><input type="time" id="st-start" value="' + esc(draft.sleepStart) + '"></label><label class="field"><span>기상</span><input type="time" id="st-end" value="' + esc(draft.sleepEnd) + '"></label></div>' +
+    '<div class="field"><span>수면 시간</span><p class="note">요일마다 그날 밤에 자는 시각과 다음 날 아침에 일어나는 시각입니다. 순공 시간에서 뺍니다.</p></div>' +
+    '<div class="row2"><label class="field"><span>취침</span><input type="time" id="st-all-s" value="' + esc(draft.sleep[0].start) + '"></label><label class="field"><span>기상</span><input type="time" id="st-all-e" value="' + esc(draft.sleep[0].end) + '"></label></div>' +
+    '<button type="button" class="btn btn-sm" data-act="sleepAll" style="justify-self:start">7일 모두 이 시간으로</button>' +
+    '<div class="sleep-rows">' + draft.sleep.map(function(x, d){
+      return '<div class="sleep-row"><span class="sleep-day">' + DOW[d] + '요일 밤<small>→ ' + DOW[(d + 1) % 7] + ' 아침</small></span><input type="time" id="st-s-' + d + '" value="' + esc(x.start) + '" aria-label="' + DOW[d] + '요일 취침"><span>–</span><input type="time" id="st-e-' + d + '" value="' + esc(x.end) + '" aria-label="' + DOW[(d + 1) % 7] + '요일 기상"></div>';
+    }).join('') + '</div>' +
     '<p class="note" id="st-len"></p>' +
     '<div class="field bk"><span>저장과 백업</span><p class="note">' + where + '</p>' +
     '<div class="bk-row"><button type="button" class="btn btn-sm" data-act="bkCopy">백업 코드 복사</button><button type="button" class="btn btn-sm" data-act="bkShowImport">백업 코드로 가져오기</button></div>' +
@@ -1037,10 +1066,14 @@ function backupImport(){
   applyBody('todos', { items: data.todos }); applyBody('settings', data.settings);
   DOCS.forEach(function(n){ save(n); });
 }
+function readSleepRows(){
+  return [0,1,2,3,4,5,6].map(function(d){ return { start: $('#st-s-' + d).value, end: $('#st-e-' + d).value }; });
+}
 function sleepLen(){
-  var el = $('#st-len'); if (!el) return;
-  var a = toMin($('#st-start').value), b = toMin($('#st-end').value), len = a === b ? 0 : (b - a + 1440) % 1440;
-  el.textContent = len ? '하루 수면 ' + durKo(len) + ' · 깨어 있는 시간 ' + durKo(1440 - len) : '취침과 기상이 같으면 수면 시간을 빼지 않습니다.';
+  var el = $('#st-len'); if (!el || !$('#st-s-0')) return;
+  var rows = readSleepRows(), total = 0, min = 1441, max = -1;
+  rows.forEach(function(x){ var a = toMin(x.start), b = toMin(x.end), len = a === b ? 0 : (b - a + 1440) % 1440; total += len; min = Math.min(min, len); max = Math.max(max, len); });
+  el.textContent = total ? '평균 수면 ' + durKo(total / 7) + (min !== max ? ' (' + durKo(min) + '–' + durKo(max) + ')' : '') : '취침과 기상이 같은 요일은 수면 시간을 빼지 않습니다.';
 }
 
 function daysLabel(days){
@@ -1170,9 +1203,9 @@ function submitSheet(){
     if (i >= 0){ S.todos[i].title = title; S.todos[i].due = isD($('#td-due').value) ? $('#td-due').value : ''; var h = parseFloat($('#td-est').value); S.todos[i].est = h > 0 ? Math.round(h * 60) : 0; }
     closeSheet(); save('todos');
   } else if (kind === 'settings'){
-    var a = $('#st-start').value, b = $('#st-end').value;
-    if (!isT(a) || !isT(b)) return sheetErr('취침과 기상 시간을 입력하세요.');
-    S.settings.sleepStart = a; S.settings.sleepEnd = b;
+    var rows = readSleepRows();
+    for (i = 0; i < 7; i++) if (!isT(rows[i].start) || !isT(rows[i].end)) return sheetErr(DOW[i] + '요일의 취침과 기상 시간을 입력하세요.');
+    S.settings.sleep = rows;
     closeSheet(); save('settings');
   }
 }
@@ -1257,6 +1290,12 @@ document.addEventListener('click', function(e){
       var xd = +el.dataset.d, xat = draft.ex.findIndex(function(x){ return x.day === xd; }), nx = { day: xd, start: el.dataset.s, end: el.dataset.e };
       if (xat >= 0) draft.ex[xat] = nx; else draft.ex.push(nx);
       drawMeal();
+      break;
+    case 'sleepAll':
+      var sa = $('#st-all-s').value, se = $('#st-all-e').value;
+      if (!isT(sa) || !isT(se)){ sheetErr('먼저 위의 취침·기상 시간을 입력하세요.'); break; }
+      for (var sd = 0; sd < 7; sd++){ $('#st-s-' + sd).value = sa; $('#st-e-' + sd).value = se; }
+      sheetErr(''); sleepLen();
       break;
     case 'bkCopy': backupCopy(); break;
     case 'bkShowImport': backupShowImport(); break;
