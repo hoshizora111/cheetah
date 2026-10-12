@@ -1450,7 +1450,8 @@ setInterval(tick, 30000);
 document.addEventListener('visibilitychange', tick);
 document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') gistPull('auto'); });
 window.addEventListener('online', function(){ gistPull('manual'); });
-setInterval(function(){ if (document.visibilityState !== 'hidden') gistPull('auto'); }, 120000);
+window.addEventListener('focus', function(){ gistPull('auto'); });
+setInterval(function(){ if (document.visibilityState !== 'hidden') gistPull('auto'); }, 45000);
 
 render();
 initCloud();

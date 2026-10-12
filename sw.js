@@ -1,5 +1,5 @@
 /* 순공 플래너: 오프라인에서도 열리도록 앱 파일을 기기에 보관한다. */
-const CACHE = 'sungong-v4';
+const CACHE = 'sungong-v5';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
