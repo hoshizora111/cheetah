@@ -28,7 +28,7 @@
   --free:#FFE14A; --free-ink:#3B3200; --hl:#FFE14A;
   --fixed:#3D5BE0; --event:#EE6B3B; --meal:#2B9E76;
   --sleep:#C9CFDC; --sleep-2:#B7BECE; --tick:rgba(22,28,42,.16);
-  --danger:#BF362B; --on-danger:#FFFFFF;
+  --danger:#BF362B; --on-danger:#FFFFFF; --gauge-left:#F3B7B0; --ok:#1E9A62;
   --h0:#DC524B; --h1:#E5852A; --h2:#C29A17; --h3:#58A038;
   --h4:#1C9C87; --h5:#3A7ADB; --h6:#8760D4; --h7:#D6578F;
   --tint:24%;
@@ -44,7 +44,7 @@
     --free:#DDBF30; --free-ink:#1D1700; --hl:#6A5800;
     --fixed:#7088F5; --event:#F08355; --meal:#4CC498;
     --sleep:#2A3142; --sleep-2:#232A39; --tick:rgba(0,0,0,.38);
-    --danger:#FF8D7E; --on-danger:#2A0A06;
+    --danger:#FF8D7E; --on-danger:#2A0A06; --gauge-left:#6B2F2A; --ok:#4FD39A;
     --tint:34%;
     color-scheme:dark;
   }
@@ -56,7 +56,7 @@
   --free:#DDBF30; --free-ink:#1D1700; --hl:#6A5800;
   --fixed:#7088F5; --event:#F08355; --meal:#4CC498;
   --sleep:#2A3142; --sleep-2:#232A39; --tick:rgba(0,0,0,.38);
-  --danger:#FF8D7E; --on-danger:#2A0A06;
+  --danger:#FF8D7E; --on-danger:#2A0A06; --gauge-left:#6B2F2A; --ok:#4FD39A;
   --tint:34%;
   color-scheme:dark;
 }
@@ -117,8 +117,8 @@ input::placeholder{color:var(--ink-2);opacity:.8}
 .home{display:grid;gap:22px}
 .home > *{min-width:0}
 @media (min-width:860px){
-  .home{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-areas:"hero todos" "timer todos" "map todos" "goals todos";align-items:start;column-gap:28px}
-  .home > .hero{grid-area:hero}.home > .timerbox{grid-area:timer}.home > .goals{grid-area:goals}.home > .mapbox{grid-area:map}.home > .todos{grid-area:todos}
+  .home{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-areas:"hero todos" "timer todos" "play todos" "map todos" "goals todos";align-items:start;column-gap:28px}
+  .home > .hero{grid-area:hero}.home > .timerbox{grid-area:timer}.home > .playbox{grid-area:play}.home > .goals{grid-area:goals}.home > .mapbox{grid-area:map}.home > .todos{grid-area:todos}
 }
 .hero-days{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px;padding-bottom:2px}
 .hero-days::-webkit-scrollbar{display:none}
@@ -322,8 +322,21 @@ dialog::backdrop{background:rgba(8,12,22,.55)}
 .sess .mono{font-size:12px}
 .study-live{display:grid;gap:8px;justify-items:start}
 /* 순공 타이머 */
-.tprog{height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin:4px 0 12px}
-.tprog i{display:block;height:100%;background:var(--free);border-radius:999px;max-width:100%}
+.tprog{position:relative;height:14px;border-radius:999px;background:var(--gauge-left);overflow:hidden;margin:4px 0 12px}
+.tprog i{display:block;height:100%;background:var(--ok);border-radius:999px;max-width:100%;transition:width .6s}
+.tprog.done{background:var(--ok)}
+.tprog.done::after{content:"CLEAR";position:absolute;inset:0;display:grid;place-items:center;font-size:10px;font-weight:800;letter-spacing:.12em;color:#fff}
+.gauge-note{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-2);margin:-8px 0 10px}
+.fuse-wrap{position:relative;padding:10px 0 4px}
+.fuse{position:relative;height:14px;border-radius:4px;background:repeating-linear-gradient(135deg,#fff 0 6px,#e6e8ee 6px 12px);border:1px solid var(--line);overflow:visible}
+.fuse .burnt{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(135deg,#3a3f4b 0 6px,#2a2e38 6px 12px);border-radius:4px 0 0 4px;transition:width .6s;max-width:100%}
+.fuse .flame{position:absolute;top:50%;transform:translate(-50%,-62%);font-size:22px;line-height:1;filter:drop-shadow(0 0 4px rgba(255,140,0,.6));transition:left .6s}
+@media (prefers-reduced-motion:no-preference){.fuse .flame.lit{animation:flick .5s ease-in-out infinite alternate}}
+@keyframes flick{from{transform:translate(-50%,-62%) scale(1) rotate(-6deg)}to{transform:translate(-50%,-58%) scale(1.12) rotate(6deg)}}
+.playbox.over{background:color-mix(in srgb,var(--danger) 16%,var(--surface));border-color:var(--danger)}
+.playbox.over .sec-head h2,.playbox.over .timer-clock{color:var(--danger)}
+.playbox .foot-note{margin-top:12px;font-size:12px;color:var(--ink-2);text-align:right;font-style:italic}
+.playbox .foot-note::before{content:"* "}
 .timer-start{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{padding:4px 10px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;background:var(--surface);color:var(--ink-2)}
@@ -397,6 +410,8 @@ button,input,textarea{touch-action:manipulation}
       <div class="hero" id="hero"></div>
 
       <div class="timerbox card" id="timerBox"></div>
+
+      <div class="playbox card" id="playBox"></div>
 
       <div class="todos card">
         <div class="sec-head"><h2>남은 할 일</h2><span class="sub" id="todoSummary"></span></div>
@@ -530,8 +545,8 @@ function unionLen(iv){
 
 /* ───────── state ───────── */
 var DEFAULT_SLEEP = { start: '00:00', end: '07:00' };
-var DEFAULT_SETTINGS = { sleep: [0,1,2,3,4,5,6].map(function(){ return clone(DEFAULT_SLEEP); }), meals: [] };
-var S = { fixed: [], events: [], cuts: [], todos: [], settings: clone(DEFAULT_SETTINGS), study: { active: null, log: [] }, goals: [] };
+var DEFAULT_SETTINGS = { sleep: [0,1,2,3,4,5,6].map(function(){ return clone(DEFAULT_SLEEP); }), meals: [], playBudget: 120 };
+var S = { fixed: [], events: [], cuts: [], todos: [], settings: clone(DEFAULT_SETTINGS), study: { active: null, log: [], playActive: null, playLog: [] }, goals: [] };
 var DOCS = ['fixed', 'events', 'todos', 'settings', 'study', 'goals'];
 var now0 = new Date();
 var ui = {
@@ -571,7 +586,12 @@ function cleanStudy(b){
   var log = (Array.isArray(b.log) ? b.log : []).filter(function(x){ return x && typeof x === 'object' && isD(x.date) && x.date >= floor && Number(x.min) > 0; }).map(function(x){
     return { id: String(x.id || uid()), subject: String(x.subject || '').slice(0, 60), start: Number(x.start) || 0, end: Number(x.end) || 0, min: Math.round(Number(x.min)), date: x.date };
   });
-  return { active: active, log: log };
+  var pa = b.playActive;
+  var playActive = (pa && typeof pa === 'object' && Number(pa.startAt) > 0) ? { subject: String(pa.subject || '').slice(0, 60), startAt: Number(pa.startAt), acc: Math.max(0, Number(pa.acc) || 0), running: !!pa.running, since: Number(pa.since) || Number(pa.startAt) } : null;
+  var playLog = (Array.isArray(b.playLog) ? b.playLog : []).filter(function(x){ return x && typeof x === 'object' && isD(x.date) && x.date >= floor && Number(x.min) > 0; }).map(function(x){
+    return { id: String(x.id || uid()), subject: String(x.subject || '').slice(0, 60), start: Number(x.start) || 0, end: Number(x.end) || 0, min: Math.round(Number(x.min)), date: x.date };
+  });
+  return { active: active, log: log, playActive: playActive, playLog: playLog };
 }
 /* 목표: 시험·제출 기한. eventId가 있으면 그 변동 일정의 날짜·시간을 따른다. */
 function cleanGoals(a){
@@ -656,7 +676,8 @@ function applyBody(name, body){
   if (name === 'settings'){
     S.settings = {
       sleep: cleanSleep(body),
-      meals: cleanMeals(body.meals)
+      meals: cleanMeals(body.meals),
+      playBudget: (Number(body.playBudget) >= 0 && Number(body.playBudget) <= 1440) ? Math.round(Number(body.playBudget)) : 120
     };
   } else if (name === 'fixed') S.fixed = cleanFixed(body.items);
   else if (name === 'events'){ S.events = cleanEvents(body.items); S.cuts = cleanCuts(body.cuts); }
@@ -1012,6 +1033,7 @@ function renderHome(){
 
   renderTodos(now);
   renderTimer();
+  renderPlay();
   renderGoals(now);
 }
 
@@ -1306,7 +1328,8 @@ function renderTimer(){
   var weekKey = ymd(mondayOf(new Date())), weekMin = 0;
   S.study.log.forEach(function(x){ if (x.date >= weekKey) weekMin += x.min; });
   var h = '<div class="sec-head"><h2>순공 타이머</h2><span class="sub">오늘 <b class="mono" id="timerStudied">' + durKo(studied) + '</b> / 가능 ' + durKo(avail) + ' · <b id="timerPct">' + pct + '%</b></span></div>' +
-    '<div class="tprog" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i id="timerBar" style="width:' + pct + '%"></i></div>';
+    '<div class="tprog' + (pct >= 100 ? ' done' : '') + '" id="timerGauge" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><i id="timerBar" style="width:' + pct + '%"></i></div>' +
+    '<div class="gauge-note"><span>공부한 만큼 초록으로 찹니다</span><span id="timerLeft">' + (pct >= 100 ? '오늘 순공 클리어!' : '남은 가능 ' + durKo(Math.max(0, avail - studied))) + '</span></div>';
   if (a){
     h += '<div class="timer-live' + (a.running ? '' : ' paused') + '"><div class="timer-sub">' + esc(a.subject || '공부') + (a.running ? '<span class="pill pill-free">진행 중</span>' : '<span class="pill pill-busy">일시정지</span>') + '</div>' +
       '<div class="timer-clock" id="timerClock">' + clockStr(elapsedMs(a)) + '</div>' +
@@ -1335,6 +1358,63 @@ function timerTick(){
   if ((el = $('#timerStudied'))) el.textContent = durKo(studied);
   if ((el = $('#timerPct'))) el.textContent = pct + '%';
   if ((el = $('#timerBar'))) el.style.width = pct + '%';
+  if ((el = $('#timerLeft'))) el.textContent = pct >= 100 ? '오늘 순공 클리어!' : '남은 가능 ' + durKo(Math.max(0, avail - studied));
+  if ((el = $('#timerGauge'))) el.classList.toggle('done', pct >= 100);
+}
+/* ───────── 순놀 타이머 ───────── */
+function playedToday(){
+  var key = ymd(new Date()), total = 0;
+  S.study.playLog.forEach(function(x){ if (x.date === key) total += x.min; });
+  if (S.study.playActive) total += elapsedMs(S.study.playActive) / 60000;
+  return total;
+}
+function renderPlay(){
+  var box = $('#playBox'); if (!box) return;
+  var a = S.study.playActive, key = ymd(new Date()), budget = S.settings.playBudget;
+  var typed = $('#play-subject') ? $('#play-subject').value : '';
+  var played = playedToday(), used = budget > 0 ? Math.min(100, played / budget * 100) : (played > 0 ? 100 : 0), over = budget > 0 ? played > budget : played > 0;
+  box.classList.toggle('over', over);
+  var h = '<div class="sec-head"><h2>순놀 타이머</h2><span class="sub">오늘 <b class="mono" id="playPlayed">' + durKo(played) + '</b> / 정해둔 ' + durKo(budget) + ' <button type="button" class="btn btn-sm btn-ghost" data-act="playBudget" style="padding:2px 6px">바꾸기</button></span></div>' +
+    '<div class="fuse-wrap"><div class="fuse" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(used) + '" aria-label="오늘 놀 시간 심지"><div class="burnt" id="playBurnt" style="width:' + used.toFixed(1) + '%"></div><span class="flame' + (a && a.running ? ' lit' : '') + '" id="playFlame" style="left:' + used.toFixed(1) + '%">' + (over ? '💥' : '🔥') + '</span></div></div>' +
+    '<div class="gauge-note"><span>놀수록 심지가 타들어갑니다</span><span id="playLeft">' + (over ? '초과 ' + durKo(played - budget) : '남은 놀 시간 ' + durKo(budget - played)) + '</span></div>';
+  if (a){
+    h += '<div class="timer-live' + (a.running ? '' : ' paused') + '"><div class="timer-sub">' + esc(a.subject || '놀기') + (a.running ? '<span class="pill pill-busy">노는 중</span>' : '<span class="pill pill-busy">일시정지</span>') + '</div>' +
+      '<div class="timer-clock" id="playClock">' + clockStr(elapsedMs(a)) + '</div>' +
+      '<div class="timer-btns">' + (a.running ? '<button type="button" class="btn" data-act="playPause">일시정지</button>' : '<button type="button" class="btn" data-act="playResume">계속</button>') +
+      '<button type="button" class="btn btn-primary" data-act="playStop">그만 놀기</button></div></div>';
+  } else {
+    h += '<form class="timer-start" id="playStart" autocomplete="off"><input type="text" id="play-subject" maxlength="60" placeholder="뭐 하고 놀기? 예: 유튜브, 게임" value="' + esc(typed) + '" aria-label="노는 내용"><button type="submit" class="btn btn-primary">놀기 시작</button></form>';
+  }
+  var today = S.study.playLog.filter(function(x){ return x.date === key; }).sort(function(x, y){ return y.end - x.end; });
+  if (today.length) h += '<ul class="tlog" aria-label="오늘 논 기록">' + today.map(function(x){
+    return '<li><span class="t">' + hhmmOf(x.start) + '–' + hhmmOf(x.end) + '</span><span class="n">' + esc(x.subject || '놀기') + '</span><span class="d">' + durKo(x.min) + '</span><button type="button" class="rm" data-act="playDel" data-id="' + esc(x.id) + '" aria-label="이 기록 삭제">×</button></li>';
+  }).join('') + '</ul>';
+  h += '<p class="foot-note">적당히 놀자</p>';
+  box.innerHTML = h;
+}
+function playTick(){
+  var a = S.study.playActive; if (!a || !a.running || document.visibilityState === 'hidden') return;
+  var c = $('#playClock'); if (!c) return;
+  c.textContent = clockStr(elapsedMs(a));
+  var budget = S.settings.playBudget, played = playedToday(), used = budget > 0 ? Math.min(100, played / budget * 100) : 100, over = budget > 0 ? played > budget : true, el;
+  if ((el = $('#playPlayed'))) el.textContent = durKo(played);
+  if ((el = $('#playBurnt'))) el.style.width = used.toFixed(1) + '%';
+  if ((el = $('#playFlame'))){ el.style.left = used.toFixed(1) + '%'; el.textContent = over ? '💥' : '🔥'; }
+  if ((el = $('#playLeft'))) el.textContent = over ? '초과 ' + durKo(played - budget) : '남은 놀 시간 ' + durKo(budget - played);
+  var box = $('#playBox'); if (box) box.classList.toggle('over', over);
+}
+function playStop(){
+  var a = S.study.playActive; if (!a) return;
+  var min = Math.round(elapsedMs(a) / 60000), now = Date.now();
+  S.study.playActive = null;
+  if (min >= 1) S.study.playLog.push({ id: uid(), subject: a.subject, start: a.since || a.startAt, end: now, min: min, date: ymd(new Date(now)) });
+  save('study');
+}
+function openPlayBudget(){
+  kind = 'playBudget'; draft = {};
+  form.innerHTML = '<h2 id="sheetTitle">오늘 놀 시간 정하기</h2><p class="hint">이 시간을 넘기면 순놀 타이머가 빨갛게 변합니다</p>' +
+    '<label class="field"><span>하루 놀 시간 (분)</span><input type="number" id="pb-min" min="0" max="1440" step="10" inputmode="numeric" value="' + S.settings.playBudget + '"></label>' + actions(false);
+  showSheet();
 }
 function timerStart(subject){
   var now = Date.now();
@@ -1659,6 +1739,7 @@ function submitSheet(){
   var i;
   if (kind === 'meal') return submitMeal();
   if (kind === 'manual') return submitManual();
+  if (kind === 'playBudget'){ var pb = Math.round(parseFloat($('#pb-min').value)); if (!(pb >= 0)) return sheetErr('분 단위 숫자를 입력하세요.'); S.settings.playBudget = Math.min(1440, pb); closeSheet(); save('settings'); return; }
   if (kind === 'goal') return submitGoal();
   if (kind === 'fixed'){
     readFixed();
@@ -1807,6 +1888,13 @@ document.addEventListener('click', function(e){
       if (timerDelArmed !== id){ timerDelArmed = id; el.textContent = '삭제?'; el.style.width = 'auto'; el.style.fontSize = '12px'; break; }
       timerDelArmed = ''; S.study.log = S.study.log.filter(function(x){ return x.id !== id; }); save('study'); break;
     case 'timerManual': openManual(); break;
+    case 'playPause': if (S.study.playActive && S.study.playActive.running){ S.study.playActive.acc = elapsedMs(S.study.playActive); S.study.playActive.running = false; save('study'); } break;
+    case 'playResume': if (S.study.playActive && !S.study.playActive.running){ S.study.playActive.startAt = Date.now(); S.study.playActive.running = true; save('study'); } break;
+    case 'playStop': playStop(); break;
+    case 'playDel':
+      if (timerDelArmed !== 'p' + id){ timerDelArmed = 'p' + id; el.textContent = '삭제?'; el.style.width = 'auto'; el.style.fontSize = '12px'; break; }
+      timerDelArmed = ''; S.study.playLog = S.study.playLog.filter(function(x){ return x.id !== id; }); save('study'); break;
+    case 'playBudget': openPlayBudget(); break;
     case 'sleepAll':
       var sa = $('#st-all-s').value, se = $('#st-all-e').value;
       if (!isT(sa) || !isT(se)){ sheetErr('먼저 위의 취침·기상 시간을 입력하세요.'); break; }
@@ -1864,8 +1952,10 @@ document.addEventListener('scroll', function(e){
 function tick(){ if (!dlg.open && document.visibilityState !== 'hidden' && ui.tab !== 'events' && ui.tab !== 'study') render(); }
 setInterval(tick, 30000);
 setInterval(timerTick, 1000);
+setInterval(playTick, 1000);
 document.addEventListener('submit', function(e){
   if (e.target && e.target.id === 'timerStart'){ e.preventDefault(); var v = $('#timer-subject').value.trim(); timerStart(v || '공부'); }
+  if (e.target && e.target.id === 'playStart'){ e.preventDefault(); var pv = $('#play-subject').value.trim(); var pn = Date.now(); S.study.playActive = { subject: pv.slice(0, 60) || '놀기', startAt: pn, acc: 0, running: true, since: pn }; save('study'); }
 });
 applyBg();
 document.addEventListener('visibilitychange', tick);
