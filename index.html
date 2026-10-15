@@ -117,8 +117,8 @@ input::placeholder{color:var(--ink-2);opacity:.8}
 .home{display:grid;gap:22px}
 .home > *{min-width:0}
 @media (min-width:860px){
-  .home{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-areas:"hero todos" "timer todos" "map todos";align-items:start;column-gap:28px}
-  .home > .hero{grid-area:hero}.home > .timerbox{grid-area:timer}.home > .mapbox{grid-area:map}.home > .todos{grid-area:todos}
+  .home{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-areas:"hero todos" "timer todos" "map todos" "goals todos";align-items:start;column-gap:28px}
+  .home > .hero{grid-area:hero}.home > .timerbox{grid-area:timer}.home > .goals{grid-area:goals}.home > .mapbox{grid-area:map}.home > .todos{grid-area:todos}
 }
 .hero-days{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px;padding-bottom:2px}
 .hero-days::-webkit-scrollbar{display:none}
@@ -288,6 +288,21 @@ dialog::backdrop{background:rgba(8,12,22,.55)}
 .sheet-actions{display:flex;gap:8px;align-items:center}
 .sheet-actions .sp{flex:1}
 .note{font-size:12.5px;color:var(--ink-2)}
+/* 목표까지 남은 순공 */
+.goal{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+.goal-main{text-align:left;min-width:0;display:block;width:100%}
+.goal-title{font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap;overflow-wrap:anywhere}
+.goal-meta{font-size:12.5px;color:var(--ink-2);margin-top:2px}
+.goal-free{text-align:right;white-space:nowrap}
+.goal-free b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:19px;font-weight:600}
+.goal-free b i{font-style:normal;font-size:.7em;color:var(--ink-2)}
+.goal-free small{display:block;font-size:11px;color:var(--ink-2)}
+.goal.over{opacity:.55}
+.gl-list{display:grid;gap:6px;max-height:50vh;overflow:auto}
+.gl-item{display:flex;gap:8px;align-items:baseline;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);text-align:left;min-width:0}
+.gl-item .mono{font-size:12px;color:var(--ink-2);white-space:nowrap}
+.gl-item .gl-t{overflow-wrap:anywhere}
+.gl-item small{color:var(--ok);margin-left:auto;white-space:nowrap}
 /* 순공 타이머 */
 .tprog{height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin:4px 0 12px}
 .tprog i{display:block;height:100%;background:var(--free);border-radius:999px;max-width:100%}
@@ -384,6 +399,11 @@ button,input,textarea{touch-action:manipulation}
           <span><i style="background:var(--meal)"></i>식사</span>
           <span><i style="background:var(--sleep)"></i>수면</span>
         </div>
+      </div>
+
+      <div class="goals card">
+        <div class="sec-head"><h2>목표까지 남은 순공</h2><button type="button" class="btn btn-sm" data-act="goalAdd">+ 목표</button></div>
+        <ul id="goalList"></ul>
       </div>
     </section>
 
@@ -487,8 +507,8 @@ function unionLen(iv){
 /* ───────── state ───────── */
 var DEFAULT_SLEEP = { start: '00:00', end: '07:00' };
 var DEFAULT_SETTINGS = { sleep: [0,1,2,3,4,5,6].map(function(){ return clone(DEFAULT_SLEEP); }), meals: [] };
-var S = { fixed: [], events: [], cuts: [], todos: [], settings: clone(DEFAULT_SETTINGS), study: { active: null, log: [] } };
-var DOCS = ['fixed', 'events', 'todos', 'settings', 'study'];
+var S = { fixed: [], events: [], cuts: [], todos: [], settings: clone(DEFAULT_SETTINGS), study: { active: null, log: [] }, goals: [] };
+var DOCS = ['fixed', 'events', 'todos', 'settings', 'study', 'goals'];
 var now0 = new Date();
 var ui = {
   tab: 'home', evView: 'week', heroIdx: 0,
@@ -528,6 +548,13 @@ function cleanStudy(b){
     return { id: String(x.id || uid()), subject: String(x.subject || '').slice(0, 60), start: Number(x.start) || 0, end: Number(x.end) || 0, min: Math.round(Number(x.min)), date: x.date };
   });
   return { active: active, log: log };
+}
+/* 목표: 시험·제출 기한. eventId가 있으면 그 변동 일정의 날짜·시간을 따른다. */
+function cleanGoals(a){
+  var floor = ymd(addDays(new Date(), -3));
+  return (Array.isArray(a) ? a : []).filter(function(x){ return x && typeof x === 'object' && isD(x.date) && x.date >= floor; }).map(function(x){
+    return { id: String(x.id || uid()), title: String(x.title || '').slice(0, 80), date: x.date, time: isT(x.time) ? x.time : '', eventId: String(x.eventId || '') };
+  });
 }
 function cleanTodos(a){
   return (Array.isArray(a) ? a : []).filter(function(x){ return x && typeof x === 'object'; }).map(function(x){
@@ -611,6 +638,7 @@ function applyBody(name, body){
   else if (name === 'events'){ S.events = cleanEvents(body.items); S.cuts = cleanCuts(body.cuts); }
   else if (name === 'todos') S.todos = cleanTodos(body.items);
   else if (name === 'study') S.study = cleanStudy(body);
+  else if (name === 'goals') S.goals = cleanGoals(body.items);
 }
 
 /* ───────── storage: 계정 저장소(db) + 브라우저 캐시 ───────── */
@@ -677,12 +705,12 @@ function gistApi(path, method, body){
   });
 }
 function snapshotBody(){
-  return { app: 'sungong-planner', v: 1, updatedAt: store.updatedAt, fixed: S.fixed, events: S.events, cuts: S.cuts, todos: S.todos, settings: S.settings, study: S.study };
+  return { app: 'sungong-planner', v: 1, updatedAt: store.updatedAt, fixed: S.fixed, events: S.events, cuts: S.cuts, todos: S.todos, settings: S.settings, study: S.study, goals: S.goals };
 }
-function hasData(d){ return !!((d.fixed && d.fixed.length) || (d.events && d.events.length) || (d.todos && d.todos.length) || (d.study && d.study.log && d.study.log.length) || (d.settings && d.settings.meals && d.settings.meals.length)); }
+function hasData(d){ return !!((d.fixed && d.fixed.length) || (d.events && d.events.length) || (d.todos && d.todos.length) || (d.study && d.study.log && d.study.log.length) || (d.goals && d.goals.length) || (d.settings && d.settings.meals && d.settings.meals.length)); }
 function applySnapshot(d){
   applyBody('fixed', { items: d.fixed }); applyBody('events', { items: d.events, cuts: d.cuts });
-  applyBody('todos', { items: d.todos }); applyBody('settings', d.settings || {}); applyBody('study', d.study || {});
+  applyBody('todos', { items: d.todos }); applyBody('settings', d.settings || {}); applyBody('study', d.study || {}); applyBody('goals', { items: d.goals });
   DOCS.forEach(function(n){ lsSet(n, docBody(n)); });
   store.updatedAt = String(d.updatedAt || ''); lsSet('updatedAt', store.updatedAt);
 }
@@ -959,6 +987,7 @@ function renderHome(){
 
   renderTodos(now);
   renderTimer();
+  renderGoals(now);
 }
 
 function renderTodos(now){
@@ -1114,6 +1143,73 @@ function renderEvents(){
       (se.length ? '<div class="wk-items">' + se.map(evCard).join('') + '</div>' : '<p class="empty">이 날은 변동 일정이 없습니다.</p>') + '</div>';
   }
   $('#evBody').innerHTML = html;
+}
+
+/* ───────── 목표까지 남은 순공 ───────── */
+function goalDeadline(g){
+  var ev = null;
+  if (g.eventId) for (var i = 0; i < S.events.length; i++) if (S.events[i].id === g.eventId){ ev = S.events[i]; break; }
+  var date = ev ? ev.date : g.date, time = ev ? (ev.allDay ? '' : ev.start) : g.time;
+  var t = time ? new Date(parseYmd(date).getTime() + toMin(time) * 60000) : addDays(parseYmd(date), 1);
+  return { t: t, date: date, time: time, ev: ev, missing: !!(g.eventId && !ev) };
+}
+function renderGoals(now){
+  var el = $('#goalList'); if (!el) return;
+  var items = S.goals.map(function(g){ return { g: g, d: goalDeadline(g) }; }).sort(function(a, b){ return a.d.t - b.d.t; });
+  el.innerHTML = items.length ? items.map(function(it){
+    var g = it.g, d = it.d, left = d.t - now, over = left <= 0;
+    var free = over ? 0 : freeBetween(now, d.t), days = Math.max(1, Math.ceil(left / 86400000));
+    var dd = Math.round((parseYmd(d.date) - sod(now)) / 86400000);
+    var chip = over ? '<span class="dchip">지남</span>' : '<span class="dchip' + (dd <= 0 ? ' soon' : dd <= 2 ? ' soon' : '') + '">' + (dd <= 0 ? 'D-DAY' : 'D-' + dd) + '</span>';
+    var meta = mdLabel(parseYmd(d.date)) + (d.time ? ' ' + d.time : ' 하루 끝까지') + (d.ev ? ' · 일정에서 불러옴' : d.missing ? ' · 연결된 일정이 삭제됨' : '') +
+      (!over && days > 1 && free > 0 ? ' · 하루 평균 ' + durKo(free / days) : '');
+    return '<li class="goal' + (over ? ' over' : '') + '"><button type="button" class="goal-main" data-act="goalEdit" data-id="' + esc(g.id) + '"><span class="goal-title">' + esc(g.title) + chip + '</span><span class="goal-meta">' + esc(meta) + '</span></button>' +
+      '<span class="goal-free"><b>' + (over ? '0<i>h</i>' : durHM(free)) + '</b><small>남은 순공</small></span></li>';
+  }).join('') : '<li class="empty">시험이나 과제 제출 기한을 목표로 넣으면, 그때까지 확보할 수 있는 순공 시간을 세어 줍니다. 일정 탭에 넣어 둔 시험을 불러오거나 직접 입력하세요.</li>';
+}
+function openGoal(item){
+  kind = 'goal';
+  draft = item ? clone(item) : { id: '', title: '', date: ymd(addDays(new Date(), 7)), time: '', eventId: '', mode: 'pick', q: '' };
+  drawGoal(); showSheet();
+}
+function goalResults(){
+  var q = (draft.q || '').trim().toLowerCase(), today = ymd(new Date());
+  var have = {}; S.goals.forEach(function(g){ if (g.eventId) have[g.eventId] = 1; });
+  var list = S.events.filter(function(e){ return e.date >= today && (!q || e.title.toLowerCase().indexOf(q) >= 0); })
+    .sort(function(a, b){ return (a.date + (a.start || '')) < (b.date + (b.start || '')) ? -1 : 1; }).slice(0, 10);
+  if (!list.length) return '<p class="empty">' + (q ? '「' + esc(draft.q.trim()) + '」에 맞는 일정이 없습니다.' : '앞으로의 변동 일정이 없습니다. 일정 탭에서 먼저 넣거나 직접 입력하세요.') + '</p>';
+  return '<div class="gl-list">' + list.map(function(e){
+    return '<button type="button" class="gl-item" data-act="goalPick" data-id="' + esc(e.id) + '"><span class="mono">' + mdLabel(parseYmd(e.date)) + (e.allDay ? '' : ' ' + e.start) + '</span><span class="gl-t">' + esc(e.title) + '</span>' + (have[e.id] ? '<small>추가됨</small>' : '') + '</button>';
+  }).join('') + '</div>';
+}
+function drawGoal(){
+  var h;
+  if (!draft.id && draft.mode === 'pick'){
+    h = '<h2 id="sheetTitle">목표 추가</h2><p class="hint">시험·과제 제출처럼 순공 시간을 세어 볼 기준</p>' +
+      '<div class="seg-ctl" role="group"><button type="button" data-act="goalMode" data-m="pick" aria-pressed="true">일정에서 불러오기</button><button type="button" data-act="goalMode" data-m="manual" aria-pressed="false">직접 입력</button></div>' +
+      '<label class="field"><span>일정 검색</span><input type="text" id="gl-q" placeholder="예: 중간고사, 과제" value="' + esc(draft.q || '') + '" autocomplete="off"></label>' +
+      '<div id="gl-results">' + goalResults() + '</div>' +
+      '<div class="sheet-actions"><span class="sp"></span><button type="button" class="btn" data-act="cancel">취소</button></div>';
+  } else {
+    h = '<h2 id="sheetTitle">목표 ' + (draft.id ? '수정' : '직접 입력') + '</h2>' +
+      (!draft.id ? '<div class="seg-ctl" role="group"><button type="button" data-act="goalMode" data-m="pick" aria-pressed="false">일정에서 불러오기</button><button type="button" data-act="goalMode" data-m="manual" aria-pressed="true">직접 입력</button></div>' : '') +
+      '<label class="field"><span>목표</span><input type="text" id="gl-title" maxlength="80" value="' + esc(draft.title) + '" placeholder="예: 경제원론 중간고사, 통계 과제 제출"></label>' +
+      '<div class="row2"><label class="field"><span>기한 날짜</span><input type="date" id="gl-date" value="' + esc(draft.date) + '"></label><label class="field"><span>시각 (비우면 그날 끝)</span><input type="time" id="gl-time" value="' + esc(draft.time) + '"></label></div>' +
+      (draft.eventId ? '<p class="note">일정에서 불러온 목표입니다. 날짜나 시각을 바꾸면 일정과의 연결이 끊기고 여기 적은 값을 씁니다.</p>' : '') +
+      actions(!!draft.id);
+  }
+  form.innerHTML = h;
+}
+function submitGoal(){
+  var title = $('#gl-title').value.trim(), date = $('#gl-date').value, time = $('#gl-time').value;
+  if (!title) return sheetErr('목표를 적어 주세요.');
+  if (!isD(date)) return sheetErr('기한 날짜를 고르세요.');
+  if (time && !isT(time)) return sheetErr('시각이 올바르지 않습니다.');
+  var g = { id: draft.id || uid(), title: title, date: date, time: time || '', eventId: draft.eventId || '' };
+  if (g.eventId){ var d = goalDeadline({ eventId: g.eventId, date: date, time: time }); if (d.ev && (d.ev.date !== date || (d.ev.allDay ? '' : d.ev.start) !== (time || ''))) g.eventId = ''; }
+  var at = S.goals.findIndex(function(x){ return x.id === g.id; });
+  if (at >= 0) S.goals[at] = g; else S.goals.push(g);
+  closeSheet(); save('goals');
 }
 
 /* ───────── 순공 타이머 ───────── */
@@ -1364,7 +1460,7 @@ function openSettings(){
 var bkArmed = false;
 function bkMsg(m){ var e = $('#bk-msg'); if (!e) return; e.textContent = m || ''; e.hidden = !m; }
 function backupCopy(){
-  var code = JSON.stringify({ app: 'sungong-planner', v: 1, fixed: S.fixed, events: S.events, cuts: S.cuts, todos: S.todos, settings: S.settings, study: S.study });
+  var code = JSON.stringify({ app: 'sungong-planner', v: 1, fixed: S.fixed, events: S.events, cuts: S.cuts, todos: S.todos, settings: S.settings, study: S.study, goals: S.goals });
   var t = $('#bk-text'); t.hidden = false; t.readOnly = true; t.value = code; $('#bk-apply').hidden = true;
   var manual = function(){
     try { t.focus(); t.select(); t.setSelectionRange(0, code.length); } catch (e){}
@@ -1389,7 +1485,7 @@ function backupImport(){
   if (!bkArmed){ bkArmed = true; $('#bk-apply').textContent = '한 번 더 누르면 지금 내용을 덮어씁니다'; return; }
   closeSheet();
   applyBody('fixed', { items: data.fixed }); applyBody('events', { items: data.events, cuts: data.cuts });
-  applyBody('todos', { items: data.todos }); applyBody('settings', data.settings); applyBody('study', data.study || {});
+  applyBody('todos', { items: data.todos }); applyBody('settings', data.settings); applyBody('study', data.study || {}); applyBody('goals', { items: data.goals });
   DOCS.forEach(function(n){ save(n); });
 }
 function readSleepRows(){
@@ -1496,6 +1592,7 @@ function submitSheet(){
   var i;
   if (kind === 'meal') return submitMeal();
   if (kind === 'manual') return submitManual();
+  if (kind === 'goal') return submitGoal();
   if (kind === 'fixed'){
     readFixed();
     if (!draft.title) return sheetErr('이름을 입력하세요.');
@@ -1544,6 +1641,7 @@ function deleteDraft(){
   else if (k === 'event'){ S.events = S.events.filter(function(e){ return e.id !== id; }); save('events'); }
   else if (k === 'todo'){ S.todos = S.todos.filter(function(t){ return t.id !== id; }); save('todos'); }
   else if (k === 'meal'){ S.settings.meals = S.settings.meals.filter(function(m){ return m.id !== id; }); save('settings'); }
+  else if (k === 'goal'){ S.goals = S.goals.filter(function(g){ return g.id !== id; }); save('goals'); }
 }
 
 /* ───────── events ───────── */
@@ -1624,6 +1722,13 @@ document.addEventListener('click', function(e){
       if (xat >= 0) draft.ex[xat] = nx; else draft.ex.push(nx);
       drawMeal();
       break;
+    case 'goalAdd': openGoal(null); break;
+    case 'goalEdit': t = S.goals.find(function(x){ return x.id === id; }); if (t) openGoal(t); break;
+    case 'goalMode': draft.mode = el.dataset.m; drawGoal(); if (draft.mode === 'pick' && $('#gl-q')) $('#gl-q').focus(); break;
+    case 'goalPick':
+      t = S.events.find(function(x){ return x.id === id; }); if (!t) break;
+      if (!S.goals.some(function(x){ return x.eventId === id; })) S.goals.push({ id: uid(), title: t.title, date: t.date, time: t.allDay ? '' : t.start, eventId: t.id });
+      closeSheet(); save('goals'); break;
     case 'bgClear': bg.url = ''; bgSave(); applyBg(); closeSheet(); openSettings(); break;
     case 'timerPick': if ($('#timer-subject')){ $('#timer-subject').value = el.dataset.s; $('#timer-subject').focus(); } break;
     case 'timerPause': if (S.study.active && S.study.active.running){ S.study.active.acc = elapsedMs(S.study.active); S.study.active.running = false; save('study'); } break;
@@ -1649,6 +1754,7 @@ document.addEventListener('click', function(e){
 form.addEventListener('submit', function(e){ e.preventDefault(); submitSheet(); });
 form.addEventListener('change', function(e){ if (e.target.id === 'bg-file') bgPick(e.target.files && e.target.files[0]); });
 form.addEventListener('input', function(e){
+  if (e.target.id === 'gl-q'){ draft.q = e.target.value; var r = $('#gl-results'); if (r) r.innerHTML = goalResults(); }
   if (e.target.id === 'bg-op'){ bg.op = (+e.target.value) / 100; var v = $('#bg-op-val'); if (v) v.textContent = e.target.value + '%'; bgSave(); applyBg(); }
   if (e.target.id === 'ev-timed'){ $('#ev-start').disabled = $('#ev-end').disabled = !e.target.checked; }
   if (kind === 'settings') sleepLen();
